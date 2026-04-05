@@ -23,20 +23,11 @@
                     <label class="form-label text-muted">Ruta del archivo hosts</label>
                     <div class="input-group">
                         <span class="input-group-text"><i class="fas fa-file-alt"></i></span>
-                        <input
-                            type="text"
-                            class="form-control"
-                            v-model="importPath"
-                            placeholder="C:\Windows\System32\drivers\etc\hosts"
-                        >
+                        <input type="text" class="form-control" v-model="importPath" placeholder="C:\Windows\System32\drivers\etc\hosts">
                     </div>
                     <p class="form-text">Se leeran las entradas del archivo y se guardaran en la base de datos local.</p>
 
-                    <button
-                        class="btn btn-primary btn-lg w-100 mt-3"
-                        @click="importHosts"
-                        :disabled="importing"
-                    >
+                    <button class="btn btn-primary btn-lg w-100 mt-3" @click="importHosts" :disabled="importing">
                         <span v-if="importing" class="spinner-border spinner-border-sm me-2"></span>
                         <i v-else class="fas fa-file-import me-2"></i>
                         {{ importing ? 'Importando...' : 'Importar archivo hosts' }}
@@ -64,13 +55,19 @@
                             <span class="badge bg-white bg-opacity-25 ms-2">{{ totalHosts }} hosts</span>
                         </div>
                         <div class="header-actions">
-                            <button class="btn btn-header mx-1" @click="viewHostFile" title="Ver archivo hosts">
-                                <i class="fas fa-file-lines me-1"></i> Ver archivo
+                            <button class="btn btn-header mx-1" @click="openFileEditor('hosts')" title="Editar archivo hosts">
+                                <i class="fas fa-file-lines me-1"></i> Hosts
+                            </button>
+                            <button class="btn btn-header mx-1" @click="openFileEditor('vhosts')" title="Editar archivo vhosts">
+                                <i class="fas fa-server me-1"></i> VHosts
                             </button>
                             <button class="btn btn-header mx-1" @click="showTagsModal = true" title="Administrar tags">
                                 <i class="fas fa-tags me-1"></i> Tags
                             </button>
-                            <button class="btn btn-header mx-1" @click="showSettingsModal = true" title="Configuracion">
+                            <button class="btn btn-header mx-1" @click="restartApache" :disabled="restarting" title="Reiniciar Apache">
+                                <i class="fas fa-rotate" :class="{ 'fa-spin': restarting }"></i>
+                            </button>
+                            <button class="btn btn-header mx-1" @click="openSettings" title="Configuracion">
                                 <i class="fas fa-gear"></i>
                             </button>
                         </div>
@@ -84,36 +81,19 @@
                     <div class="toolbar-content">
                         <div class="search-box">
                             <i class="fas fa-search search-icon"></i>
-                            <input
-                                type="text"
-                                class="form-control"
-                                placeholder="Buscar por dominio o IP..."
-                                v-model="search"
-                            >
+                            <input type="text" class="form-control" placeholder="Buscar por dominio o IP..." v-model="search">
                             <button v-if="search" class="btn-clear" @click="search = ''">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
                         <div class="toolbar-filters">
-                            <button
-                                class="btn btn-filter"
-                                :class="{ active: filters.onlyActive }"
-                                @click="filters.onlyActive = !filters.onlyActive"
-                            >
+                            <button class="btn btn-filter" :class="{ active: filters.onlyActive }" @click="filters.onlyActive = !filters.onlyActive">
                                 <i class="fas fa-toggle-on me-1"></i> Activos
                             </button>
-                            <button
-                                class="btn btn-filter"
-                                :class="{ active: filters.onlyFavorite }"
-                                @click="filters.onlyFavorite = !filters.onlyFavorite"
-                            >
+                            <button class="btn btn-filter" :class="{ active: filters.onlyFavorite }" @click="filters.onlyFavorite = !filters.onlyFavorite">
                                 <i class="fas fa-star me-1"></i> Favoritos
                             </button>
-                            <button
-                                class="btn btn-filter"
-                                :class="{ active: filters.showHidden }"
-                                @click="filters.showHidden = !filters.showHidden"
-                            >
+                            <button class="btn btn-filter" :class="{ active: filters.showHidden }" @click="filters.showHidden = !filters.showHidden">
                                 <i class="fas fa-eye-slash me-1"></i> Ocultos
                             </button>
                             <div class="filter-divider" v-if="allTags.length"></div>
@@ -129,6 +109,9 @@
                                 {{ tag.label }}
                             </button>
                         </div>
+                        <button class="btn btn-primary btn-sm ms-auto" @click="openAddHostModal">
+                            <i class="fas fa-plus me-1"></i> Nuevo host
+                        </button>
                     </div>
                 </div>
             </div>
@@ -152,7 +135,6 @@
                                 :key="host.id"
                                 class="host-row"
                                 :class="{
-                                    'is-inactive': !host.active,
                                     'is-hidden': host.hidden,
                                     'is-highlight': host.id === highlightId
                                 }"
@@ -165,57 +147,27 @@
                                 </div>
                                 <div class="host-domain" v-html="highlightSearch(host.domain)"></div>
                                 <div class="host-tags-list">
-                                    <span
-                                        v-for="tag in host.tags"
-                                        :key="tag.id"
-                                        class="tag-pill"
-                                        :style="{ background: tag.color }"
-                                    >{{ tag.label }}</span>
+                                    <span v-for="tag in host.tags" :key="tag.id" class="tag-pill" :style="{ background: tag.color }">{{ tag.label }}</span>
                                 </div>
                                 <div class="host-ip-badge">{{ host.ip }}</div>
                                 <div class="host-actions">
                                     <div class="tag-dropdown-wrapper">
-                                        <button
-                                            class="btn-icon"
-                                            :class="{ 'has-tags': host.tags.length }"
-                                            @click.stop="toggleTagDropdown(host.id)"
-                                            title="Tags"
-                                        >
+                                        <button class="btn-icon" :class="{ 'has-tags': host.tags.length }" @click.stop="toggleTagDropdown(host.id)" title="Tags">
                                             <i class="fas fa-tag"></i>
                                         </button>
                                         <div class="tag-dropdown" v-if="tagDropdownHostId === host.id" @click.stop>
-                                            <div v-if="allTags.length === 0" class="tag-dropdown-empty">
-                                                Sin tags. Crea uno desde el boton Tags.
-                                            </div>
-                                            <label
-                                                v-for="tag in allTags"
-                                                :key="tag.id"
-                                                class="tag-dropdown-item"
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    :checked="hostHasTag(host, tag.id)"
-                                                    @change="toggleHostTag(host, tag.id)"
-                                                >
+                                            <div v-if="allTags.length === 0" class="tag-dropdown-empty">Sin tags. Crea uno desde el boton Tags.</div>
+                                            <label v-for="tag in allTags" :key="tag.id" class="tag-dropdown-item">
+                                                <input type="checkbox" :checked="hostHasTag(host, tag.id)" @change="toggleHostTag(host, tag.id)">
                                                 <span class="tag-dot" :style="{ background: tag.color }"></span>
                                                 {{ tag.label }}
                                             </label>
                                         </div>
                                     </div>
-                                    <button
-                                        class="btn-icon"
-                                        :class="{ 'is-favorite': host.favorite }"
-                                        @click="toggleFavorite(host)"
-                                        title="Favorito"
-                                    >
+                                    <button class="btn-icon" :class="{ 'is-favorite': host.favorite }" @click="toggleFavorite(host)" title="Favorito">
                                         <i :class="host.favorite ? 'fas fa-star' : 'far fa-star'"></i>
                                     </button>
-                                    <button
-                                        class="btn-icon"
-                                        :class="{ 'is-hidden-btn': host.hidden }"
-                                        @click="toggleHidden(host)"
-                                        title="Ocultar"
-                                    >
+                                    <button class="btn-icon" :class="{ 'is-hidden-btn': host.hidden }" @click="toggleHidden(host)" title="Ocultar">
                                         <i :class="host.hidden ? 'fas fa-eye-slash' : 'far fa-eye'"></i>
                                     </button>
                                     <button class="btn-icon btn-icon-danger" @click="deleteHost(host)" title="Eliminar">
@@ -230,38 +182,73 @@
                         <i class="fas fa-search"></i>
                         <p>No se encontraron hosts</p>
                     </div>
+                </div>
+            </main>
 
-                    <!-- Add new host -->
-                    <div class="add-host-bar">
-                        <div class="row g-2 align-items-center">
-                            <div class="col-auto">
-                                <input
-                                    type="text"
-                                    class="form-control form-control-sm"
-                                    v-model="newHost.ip"
-                                    placeholder="127.0.0.1"
-                                    style="width: 160px"
-                                    @keyup.enter="addHost"
-                                >
+            <!-- Modal Agregar Host -->
+            <transition name="modal">
+                <div v-if="showAddHostModal" class="modal-overlay" @click.self="showAddHostModal = false">
+                    <div class="modal-box modal-box-md">
+                        <div class="modal-header-custom">
+                            <h5 class="modal-title-custom"><i class="fas fa-plus-circle me-2"></i>Nuevo host</h5>
+                            <button class="btn-icon" @click="showAddHostModal = false">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body-custom p-3">
+                            <!-- Host fields -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">IP</label>
+                                    <input type="text" class="form-control form-control-sm" v-model="newHost.ip" placeholder="127.0.0.1" style="width: 160px">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label form-label-sm">Dominio</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control" v-model="newHost.domain" placeholder="mi-dominio.local" @keyup.enter="!newHost.withVhost && addHost()">
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col">
-                                <input
-                                    type="text"
-                                    class="form-control form-control-sm"
-                                    v-model="newHost.domain"
-                                    placeholder="mi-dominio.local"
-                                    @keyup.enter="addHost"
-                                >
+
+                            <!-- VHost toggle -->
+                            <div class="vhost-section">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="withVhost" v-model="newHost.withVhost">
+                                    <label class="form-check-label" for="withVhost">Crear VirtualHost en Apache</label>
+                                </div>
+
+                                <div v-if="newHost.withVhost">
+                                    <!-- Template selector -->
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <select class="form-select form-select-sm" v-model="newHost.templateId" @change="applyTemplate" style="max-width: 250px">
+                                            <option :value="null">-- Sin plantilla --</option>
+                                            <option v-for="tpl in allTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+                                        </select>
+                                        <button class="btn btn-outline-secondary btn-sm" @click="copyDomain" title="Copiar dominio al portapapeles">
+                                            <i class="fas fa-copy me-1"></i> Copiar dominio
+                                        </button>
+                                    </div>
+
+                                    <!-- VHost editor -->
+                                    <textarea
+                                        class="form-control code-editor"
+                                        v-model="newHost.vhostContent"
+                                        rows="12"
+                                        placeholder="<VirtualHost *:80>&#10;    ServerName mi-dominio.local&#10;    DocumentRoot &quot;C:/wServer/www/mi-proyecto&quot;&#10;</VirtualHost>"
+                                        spellcheck="false"
+                                    ></textarea>
+                                </div>
                             </div>
-                            <div class="col-auto">
-                                <button class="btn btn-primary btn-sm" @click="addHost" :disabled="!newHost.domain">
-                                    <i class="fas fa-plus me-1"></i> Agregar
-                                </button>
-                            </div>
+                        </div>
+                        <div class="modal-footer-custom">
+                            <button class="btn btn-sm btn-secondary" @click="showAddHostModal = false">Cancelar</button>
+                            <button class="btn btn-sm btn-primary" @click="addHost" :disabled="!newHost.domain.trim()">
+                                <i class="fas fa-plus me-1"></i> Agregar host
+                            </button>
                         </div>
                     </div>
                 </div>
-            </main>
+            </transition>
 
             <!-- Modal Tags -->
             <transition name="modal">
@@ -269,64 +256,28 @@
                     <div class="modal-box modal-box-sm">
                         <div class="modal-header-custom">
                             <h5 class="modal-title-custom"><i class="fas fa-tags me-2"></i>Administrar tags</h5>
-                            <button class="btn-icon" @click="showTagsModal = false">
-                                <i class="fas fa-times"></i>
-                            </button>
+                            <button class="btn-icon" @click="showTagsModal = false"><i class="fas fa-times"></i></button>
                         </div>
                         <div class="modal-body-custom p-3">
-                            <!-- Create tag -->
                             <div class="tag-create-row">
-                                <input
-                                    type="color"
-                                    class="form-control form-control-color tag-color-input"
-                                    v-model="newTag.color"
-                                >
-                                <input
-                                    type="text"
-                                    class="form-control form-control-sm"
-                                    v-model="newTag.label"
-                                    placeholder="Nombre del tag"
-                                    @keyup.enter="createTag"
-                                >
-                                <button class="btn btn-primary btn-sm" @click="createTag" :disabled="!newTag.label.trim()">
-                                    <i class="fas fa-plus"></i>
-                                </button>
+                                <input type="color" class="form-control form-control-color tag-color-input" v-model="newTag.color">
+                                <input type="text" class="form-control form-control-sm" v-model="newTag.label" placeholder="Nombre del tag" @keyup.enter="createTag">
+                                <button class="btn btn-primary btn-sm" @click="createTag" :disabled="!newTag.label.trim()"><i class="fas fa-plus"></i></button>
                             </div>
-
-                            <!-- Tag list -->
                             <div class="tag-manager-list">
-                                <div v-if="allTags.length === 0" class="text-center text-muted py-3">
-                                    <small>No hay tags creados</small>
-                                </div>
+                                <div v-if="allTags.length === 0" class="text-center text-muted py-3"><small>No hay tags creados</small></div>
                                 <div v-for="tag in allTags" :key="tag.id" class="tag-manager-item">
                                     <span class="tag-dot-lg" :style="{ background: tag.color }"></span>
                                     <template v-if="editingTag && editingTag.id === tag.id">
-                                        <input
-                                            type="color"
-                                            class="form-control form-control-color tag-color-input"
-                                            v-model="editingTag.color"
-                                        >
-                                        <input
-                                            type="text"
-                                            class="form-control form-control-sm flex-fill"
-                                            v-model="editingTag.label"
-                                            @keyup.enter="saveTag"
-                                        >
-                                        <button class="btn-icon text-success" @click="saveTag" title="Guardar">
-                                            <i class="fas fa-check"></i>
-                                        </button>
-                                        <button class="btn-icon" @click="editingTag = null" title="Cancelar">
-                                            <i class="fas fa-times"></i>
-                                        </button>
+                                        <input type="color" class="form-control form-control-color tag-color-input" v-model="editingTag.color">
+                                        <input type="text" class="form-control form-control-sm flex-fill" v-model="editingTag.label" @keyup.enter="saveTag">
+                                        <button class="btn-icon text-success" @click="saveTag" title="Guardar"><i class="fas fa-check"></i></button>
+                                        <button class="btn-icon" @click="editingTag = null" title="Cancelar"><i class="fas fa-times"></i></button>
                                     </template>
                                     <template v-else>
                                         <span class="tag-manager-label">{{ tag.label }}</span>
-                                        <button class="btn-icon" @click="editTag(tag)" title="Editar">
-                                            <i class="fas fa-pen"></i>
-                                        </button>
-                                        <button class="btn-icon btn-icon-danger" @click="deleteTag(tag)" title="Eliminar">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </button>
+                                        <button class="btn-icon" @click="editTag(tag)" title="Editar"><i class="fas fa-pen"></i></button>
+                                        <button class="btn-icon btn-icon-danger" @click="deleteTag(tag)" title="Eliminar"><i class="fas fa-trash-alt"></i></button>
                                     </template>
                                 </div>
                             </div>
@@ -338,58 +289,129 @@
             <!-- Modal Configuracion -->
             <transition name="modal">
                 <div v-if="showSettingsModal" class="modal-overlay" @click.self="showSettingsModal = false">
-                    <div class="modal-box modal-box-sm">
+                    <div class="modal-box modal-box-md">
                         <div class="modal-header-custom">
                             <h5 class="modal-title-custom"><i class="fas fa-gear me-2"></i>Configuracion</h5>
-                            <button class="btn-icon" @click="showSettingsModal = false">
-                                <i class="fas fa-times"></i>
-                            </button>
+                            <button class="btn-icon" @click="showSettingsModal = false"><i class="fas fa-times"></i></button>
                         </div>
                         <div class="modal-body-custom p-3">
+                            <!-- Rutas -->
                             <div class="settings-section">
                                 <h6 class="settings-label">Ruta del archivo hosts</h6>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text"><i class="fas fa-file-alt"></i></span>
-                                    <input type="text" class="form-control" v-model="importPath">
+                                    <input type="text" class="form-control" v-model="settings.hostsPath">
                                 </div>
                             </div>
 
                             <div class="settings-section mt-3">
-                                <h6 class="settings-label">Reimportar archivo</h6>
-                                <p class="form-text mt-0 mb-2">Elimina todos los hosts actuales y vuelve a importar desde el archivo.</p>
-                                <button
-                                    class="btn btn-outline-danger btn-sm"
-                                    @click="reimportHosts"
-                                    :disabled="reimporting"
-                                >
+                                <h6 class="settings-label">Ruta del archivo VirtualHosts (Apache)</h6>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="fas fa-server"></i></span>
+                                    <input type="text" class="form-control" v-model="settings.vhostsPath" placeholder="C:\Apache24\conf\extra\httpd-vhosts.conf">
+                                </div>
+                            </div>
+
+                            <div class="settings-section mt-3">
+                                <h6 class="settings-label">Comando para reiniciar Apache</h6>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="fas fa-terminal"></i></span>
+                                    <input type="text" class="form-control" v-model="settings.apacheRestartCmd" placeholder="httpd -k restart">
+                                </div>
+                                <p class="form-text mt-1 mb-0">Windows: <code>C:\Apache24\bin\httpd.exe -k restart</code> &nbsp; Mac: <code>brew services restart httpd</code></p>
+                            </div>
+
+                            <div class="d-flex gap-2 mt-3">
+                                <button class="btn btn-primary btn-sm" @click="saveSettings">
+                                    <i class="fas fa-save me-1"></i> Guardar configuracion
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" @click="reimportHosts" :disabled="reimporting">
                                     <span v-if="reimporting" class="spinner-border spinner-border-sm me-1"></span>
                                     <i v-else class="fas fa-rotate me-1"></i>
-                                    {{ reimporting ? 'Reimportando...' : 'Reimportar archivo hosts' }}
+                                    {{ reimporting ? 'Reimportando...' : 'Reimportar hosts' }}
                                 </button>
+                            </div>
+
+                            <!-- Templates -->
+                            <hr class="my-3">
+                            <h6 class="settings-label">Plantillas de VirtualHost</h6>
+                            <p class="form-text mt-0 mb-2">Plantillas reutilizables al crear nuevos hosts.</p>
+
+                            <!-- Create template -->
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" class="form-control form-control-sm" v-model="newTemplate.name" placeholder="Nombre de la plantilla" @keyup.enter="createTemplate">
+                                <button class="btn btn-primary btn-sm" @click="createTemplate" :disabled="!newTemplate.name.trim()">
+                                    <i class="fas fa-plus me-1"></i> Crear
+                                </button>
+                            </div>
+
+                            <div class="template-list">
+                                <div v-if="allTemplates.length === 0" class="text-center text-muted py-3"><small>No hay plantillas creadas</small></div>
+                                <div v-for="tpl in allTemplates" :key="tpl.id" class="template-item">
+                                    <div class="template-item-header">
+                                        <span class="template-item-name">
+                                            <i class="fas fa-file-code me-1 text-muted"></i>
+                                            <template v-if="editingTemplate && editingTemplate.id === tpl.id">
+                                                <input type="text" class="form-control form-control-sm d-inline-block" style="width: 200px" v-model="editingTemplate.name">
+                                            </template>
+                                            <template v-else>{{ tpl.name }}</template>
+                                        </span>
+                                        <div class="d-flex gap-1">
+                                            <template v-if="editingTemplate && editingTemplate.id === tpl.id">
+                                                <button class="btn-icon text-success" @click="saveTemplate" title="Guardar"><i class="fas fa-check"></i></button>
+                                                <button class="btn-icon" @click="editingTemplate = null" title="Cancelar"><i class="fas fa-times"></i></button>
+                                            </template>
+                                            <template v-else>
+                                                <button class="btn-icon" @click="editTemplate(tpl)" title="Editar"><i class="fas fa-pen"></i></button>
+                                                <button class="btn-icon btn-icon-danger" @click="deleteTemplate(tpl)" title="Eliminar"><i class="fas fa-trash-alt"></i></button>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <textarea
+                                        v-if="editingTemplate && editingTemplate.id === tpl.id"
+                                        class="form-control code-editor mt-2"
+                                        v-model="editingTemplate.content"
+                                        rows="8"
+                                        spellcheck="false"
+                                    ></textarea>
+                                    <pre v-else-if="tpl.content" class="template-preview">{{ tpl.content }}</pre>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </transition>
 
-            <!-- Modal Ver Archivo -->
+            <!-- Modal Editor de Archivo -->
             <transition name="modal">
-                <div v-if="showFileModal" class="modal-overlay" @click.self="showFileModal = false">
-                    <div class="modal-box">
+                <div v-if="fileEditor.show" class="modal-overlay" @click.self="fileEditor.show = false">
+                    <div class="modal-box modal-box-lg">
                         <div class="modal-header-custom">
                             <div>
-                                <h5 class="modal-title-custom">Archivo hosts</h5>
-                                <small class="text-muted">{{ hostFilePath }}</small>
+                                <h5 class="modal-title-custom">
+                                    <i class="fas me-2" :class="fileEditor.type === 'hosts' ? 'fa-file-lines' : 'fa-server'"></i>
+                                    {{ fileEditor.type === 'hosts' ? 'Archivo hosts' : 'Archivo VirtualHosts' }}
+                                </h5>
+                                <small class="text-muted">{{ fileEditor.path }}</small>
                             </div>
-                            <button class="btn-icon" @click="showFileModal = false">
-                                <i class="fas fa-times"></i>
-                            </button>
+                            <div class="d-flex align-items-center gap-2">
+                                <button class="btn btn-primary btn-sm" @click="saveFileEditor" :disabled="fileEditor.saving">
+                                    <span v-if="fileEditor.saving" class="spinner-border spinner-border-sm me-1"></span>
+                                    <i v-else class="fas fa-save me-1"></i> Guardar
+                                </button>
+                                <button class="btn-icon" @click="fileEditor.show = false"><i class="fas fa-times"></i></button>
+                            </div>
                         </div>
                         <div class="modal-body-custom">
-                            <div v-if="fileContent === null" class="text-center py-4 text-muted">
+                            <div v-if="fileEditor.loading" class="text-center py-4 text-muted">
                                 <span class="spinner-border spinner-border-sm me-2"></span> Cargando...
                             </div>
-                            <pre v-else class="file-content">{{ fileContent }}</pre>
+                            <textarea
+                                v-else
+                                class="file-editor-textarea"
+                                v-model="fileEditor.content"
+                                spellcheck="false"
+                            ></textarea>
                         </div>
                     </div>
                 </div>

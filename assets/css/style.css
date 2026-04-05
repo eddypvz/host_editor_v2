@@ -410,6 +410,10 @@ body {
     transition: background var(--transition);
 }
 
+.host-row:hover {
+    background: #f1f5f9;
+}
+
 .host-row:last-child {
     border-bottom: none;
 }
@@ -594,6 +598,23 @@ input:checked + .slider::before {
     max-width: 480px;
 }
 
+.modal-box-md {
+    max-width: 600px;
+}
+
+.modal-box-lg {
+    max-width: 860px;
+    max-height: 85vh;
+}
+
+.modal-footer-custom {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--border);
+}
+
 .settings-section {
     padding: 0;
 }
@@ -641,7 +662,35 @@ input:checked + .slider::before {
     padding: 0;
 }
 
-.file-content {
+/* Code editor textarea */
+.code-editor {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #334155;
+    border-radius: var(--radius-sm);
+    resize: vertical;
+    tab-size: 4;
+}
+
+.code-editor:focus {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+}
+
+.code-editor::placeholder {
+    color: #64748b;
+}
+
+/* File editor */
+.file-editor-textarea {
+    width: 100%;
+    min-height: 400px;
+    height: 100%;
     margin: 0;
     padding: 1rem 1.25rem;
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
@@ -649,9 +698,75 @@ input:checked + .slider::before {
     line-height: 1.7;
     background: #1e293b;
     color: #e2e8f0;
+    border: none;
+    resize: none;
+    outline: none;
+    tab-size: 4;
+}
+
+.file-editor-textarea:focus {
+    outline: none;
+}
+
+/* VHost section in add modal */
+.vhost-section {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+}
+
+.vhost-section .form-check-input:checked {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+
+.vhost-section .form-check-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Templates */
+.template-list {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.template-item {
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 0.75rem;
+}
+
+.template-item:last-child {
+    border-bottom: none;
+}
+
+.template-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.template-item-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+}
+
+.template-preview {
+    margin: 0.5rem 0 0;
+    padding: 0.5rem 0.75rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    background: #1e293b;
+    color: #94a3b8;
+    border-radius: var(--radius-sm);
     white-space: pre;
     overflow-x: auto;
-    min-height: 200px;
+    max-height: 120px;
 }
 
 .modal-enter-active,

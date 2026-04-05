@@ -33,10 +33,24 @@ $db->exec("CREATE TABLE IF NOT EXISTS host_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 )");
 
+$db->exec("CREATE TABLE IF NOT EXISTS templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    content TEXT NOT NULL DEFAULT ''
+)");
+
 $db->exec("CREATE TABLE IF NOT EXISTS preferences (
     key TEXT PRIMARY KEY,
     value TEXT
 )");
+
+// Helper: get preference value
+function getPref($db, $key, $default = '') {
+    $stmt = $db->prepare("SELECT value FROM preferences WHERE key = ?");
+    $stmt->execute([$key]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ? $row['value'] : $default;
+}
 
 $action = $_REQUEST['action'] ?? '';
 
@@ -153,6 +167,7 @@ switch ($action) {
     case 'add_host':
         $ip = trim($_POST['ip'] ?? '');
         $domain = trim($_POST['domain'] ?? '');
+        $vhostContent = $_POST['vhost_content'] ?? '';
         if (!$ip || !$domain) {
             respond(['success' => false, 'error' => 'IP y dominio son requeridos'], 400);
             break;
@@ -164,7 +179,22 @@ switch ($action) {
         try {
             $stmt = $db->prepare("INSERT INTO hosts (ip, domain, active) VALUES (?, ?, 1)");
             $stmt->execute([$ip, $domain]);
-            respond(['success' => true, 'id' => (int) $db->lastInsertId()]);
+            $newId = (int) $db->lastInsertId();
+
+            // Append vhost block if provided
+            if ($vhostContent) {
+                $vhostPath = getPref($db, 'vhosts_path');
+                if ($vhostPath && file_exists($vhostPath)) {
+                    $block = "\n\n" . $vhostContent . "\n";
+                    $result = @file_put_contents($vhostPath, $block, FILE_APPEND);
+                    if ($result === false) {
+                        respond(['success' => true, 'id' => $newId, 'vhost_error' => 'No se pudo escribir en el archivo de vhosts']);
+                        break;
+                    }
+                }
+            }
+
+            respond(['success' => true, 'id' => $newId]);
         } catch (PDOException $e) {
             if ($e->getCode() == 23000) {
                 respond(['success' => false, 'error' => 'Este host ya existe'], 409);
@@ -253,6 +283,51 @@ switch ($action) {
         respond(['success' => true]);
         break;
 
+    // --- Templates CRUD ---
+
+    case 'get_templates':
+        $templates = $db->query("SELECT * FROM templates ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($templates as &$t) { $t['id'] = (int) $t['id']; }
+        respond(['templates' => $templates]);
+        break;
+
+    case 'create_template':
+        $name = trim($_POST['name'] ?? '');
+        $content = $_POST['content'] ?? '';
+        if (!$name) {
+            respond(['success' => false, 'error' => 'El nombre es requerido'], 400);
+            break;
+        }
+        try {
+            $db->prepare("INSERT INTO templates (name, content) VALUES (?, ?)")->execute([$name, $content]);
+            respond(['success' => true, 'id' => (int) $db->lastInsertId()]);
+        } catch (PDOException $e) {
+            if ($e->getCode() == 23000) {
+                respond(['success' => false, 'error' => 'Ya existe una plantilla con ese nombre'], 409);
+            } else {
+                respond(['success' => false, 'error' => $e->getMessage()], 500);
+            }
+        }
+        break;
+
+    case 'update_template':
+        $id = (int) ($_POST['id'] ?? 0);
+        $name = trim($_POST['name'] ?? '');
+        $content = $_POST['content'] ?? '';
+        if (!$name) {
+            respond(['success' => false, 'error' => 'El nombre es requerido'], 400);
+            break;
+        }
+        $db->prepare("UPDATE templates SET name = ?, content = ? WHERE id = ?")->execute([$name, $content, $id]);
+        respond(['success' => true]);
+        break;
+
+    case 'delete_template':
+        $id = (int) ($_POST['id'] ?? 0);
+        $db->prepare("DELETE FROM templates WHERE id = ?")->execute([$id]);
+        respond(['success' => true]);
+        break;
+
     // --- Preferences ---
 
     case 'save_preferences':
@@ -271,18 +346,64 @@ switch ($action) {
         respond(['preferences' => $rows]);
         break;
 
-    case 'read_host_file':
-        $configPath = 'C:\\Windows\\System32\\drivers\\etc\\hosts';
-        $content = @file_get_contents($configPath);
-        if ($content === false) {
-            respond(['success' => false, 'error' => 'No se pudo leer el archivo hosts.'], 500);
+    // --- File read/write ---
+
+    case 'read_file':
+        $type = $_POST['type'] ?? 'hosts';
+        if ($type === 'vhosts') {
+            $path = getPref($db, 'vhosts_path');
         } else {
-            respond(['success' => true, 'content' => $content, 'path' => $configPath]);
+            $path = getPref($db, 'hosts_path', 'C:\\Windows\\System32\\drivers\\etc\\hosts');
+        }
+        if (!$path || !file_exists($path)) {
+            respond(['success' => false, 'error' => 'Archivo no encontrado. Configura la ruta en ajustes.'], 404);
+            break;
+        }
+        $content = @file_get_contents($path);
+        if ($content === false) {
+            respond(['success' => false, 'error' => 'No se pudo leer el archivo.'], 500);
+        } else {
+            respond(['success' => true, 'content' => $content, 'path' => $path]);
         }
         break;
 
+    case 'save_file':
+        $type = $_POST['type'] ?? 'hosts';
+        $content = $_POST['content'] ?? '';
+        if ($type === 'vhosts') {
+            $path = getPref($db, 'vhosts_path');
+        } else {
+            $path = getPref($db, 'hosts_path', 'C:\\Windows\\System32\\drivers\\etc\\hosts');
+        }
+        if (!$path) {
+            respond(['success' => false, 'error' => 'Ruta no configurada.'], 400);
+            break;
+        }
+        $result = @file_put_contents($path, $content);
+        if ($result === false) {
+            respond(['success' => false, 'error' => 'No se pudo escribir el archivo. Verifica permisos.'], 500);
+        } else {
+            respond(['success' => true]);
+        }
+        break;
+
+    case 'restart_apache':
+        $cmd = getPref($db, 'apache_restart_cmd');
+        if (!$cmd) {
+            respond(['success' => false, 'error' => 'Comando de reinicio no configurado. Ve a Configuracion.'], 400);
+            break;
+        }
+        // Non-blocking: send response before the restart kills this process
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            pclose(popen('start /B ' . $cmd, 'r'));
+        } else {
+            pclose(popen($cmd . ' > /dev/null 2>&1 &', 'r'));
+        }
+        respond(['success' => true]);
+        break;
+
     case 'write_hosts':
-        $configPath = 'C:\\Windows\\System32\\drivers\\etc\\hosts';
+        $configPath = getPref($db, 'hosts_path', 'C:\\Windows\\System32\\drivers\\etc\\hosts');
         $hosts = $db->query("SELECT ip, domain, active FROM hosts ORDER BY ip, domain")->fetchAll(PDO::FETCH_ASSOC);
 
         $lines = ["# Host file managed by Host Editor v2", "# Last updated: " . date('Y-m-d H:i:s'), ""];

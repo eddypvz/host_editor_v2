@@ -73,18 +73,39 @@ Los tags permiten organizar los hosts por proyecto, cliente, ambiente, etc.
 
 ### Agregar hosts
 
-Al final de la lista hay un formulario para agregar nuevas entradas. Ingresa la IP y el dominio, y presiona **Agregar** o Enter. El host se agrega a la base de datos y se sincroniza al archivo hosts.
+El boton **Nuevo host** en la barra de herramientas abre un modal donde puedes:
 
-### Ver archivo hosts
+1. Ingresar la IP y el dominio
+2. Opcionalmente activar **Crear VirtualHost en Apache**
+3. Seleccionar una plantilla de VirtualHost y editarla
+4. Usar el boton **Copiar dominio** para pegarlo en la plantilla
 
-El boton **Ver archivo** en la barra superior abre un modal con el contenido actual del archivo hosts del sistema, tal como esta escrito en disco.
+Al guardar se crea la entrada en el archivo hosts y, si se configuro, se agrega el bloque VirtualHost al archivo de Apache.
+
+### Editores de archivos
+
+Los botones **Hosts** y **VHosts** en la barra superior abren editores para modificar directamente los archivos del sistema. Los cambios se guardan al hacer click en **Guardar**.
+
+### Reiniciar Apache
+
+El boton de reinicio en la barra superior ejecuta el comando configurado para reiniciar Apache. Para configurarlo, ve a **Configuracion** e ingresa el comando segun tu sistema operativo:
+
+| Sistema | Comando |
+|---------|---------|
+| Windows | `C:\Apache24\bin\httpd.exe -k restart` |
+| Mac (Homebrew) | `brew services restart httpd` |
+| Mac (nativo) | `sudo apachectl restart` |
+| Linux | `sudo systemctl restart apache2` |
 
 ### Configuracion
 
 El boton de engranaje permite:
 
-- **Cambiar la ruta** del archivo hosts
+- **Ruta del archivo hosts** - ubicacion del archivo hosts del sistema
+- **Ruta del archivo VirtualHosts** - ubicacion del archivo de virtual hosts de Apache (ej. `httpd-vhosts.conf`)
+- **Comando para reiniciar Apache** - comando a ejecutar al presionar el boton de reinicio
 - **Reimportar** el archivo hosts (elimina todos los hosts de la base y los importa de nuevo, sin perder los tags)
+- **Plantillas de VirtualHost** - crear, editar y eliminar plantillas reutilizables
 
 ## Estructura del proyecto
 
