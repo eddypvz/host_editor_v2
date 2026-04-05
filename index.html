@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Host Editor v2</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Init Screen -->
+        <div v-if="!initialized" class="init-screen">
+            <div class="init-card">
+                <div class="init-icon">
+                    <i class="fas fa-network-wired"></i>
+                </div>
+                <h1 class="init-title">Host Editor</h1>
+                <p class="init-subtitle">Gestiona tu archivo hosts de forma visual</p>
+
+                <div class="init-form">
+                    <label class="form-label text-muted">Ruta del archivo hosts</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-file-alt"></i></span>
+                        <input
+                            type="text"
+                            class="form-control"
+                            v-model="importPath"
+                            placeholder="C:\Windows\System32\drivers\etc\hosts"
+                        >
+                    </div>
+                    <p class="form-text">Se leeran las entradas del archivo y se guardaran en la base de datos local.</p>
+
+                    <button
+                        class="btn btn-primary btn-lg w-100 mt-3"
+                        @click="importHosts"
+                        :disabled="importing"
+                    >
+                        <span v-if="importing" class="spinner-border spinner-border-sm me-2"></span>
+                        <i v-else class="fas fa-file-import me-2"></i>
+                        {{ importing ? 'Importando...' : 'Importar archivo hosts' }}
+                    </button>
+
+                    <div v-if="importResult" class="alert mt-3" :class="importResult.success ? 'alert-success' : 'alert-danger'">
+                        <i :class="importResult.success ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'" class="me-2"></i>
+                        {{ importResult.message }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main App -->
+        <div v-else class="app-layout">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="container-fluid">
+                    <div class="header-content">
+                        <div class="header-left">
+                            <div class="app-brand">
+                                <i class="fas fa-network-wired"></i>
+                                <span>Host Editor</span>
+                            </div>
+                            <span class="badge bg-white bg-opacity-25 ms-2">{{ totalHosts }} hosts</span>
+                        </div>
+                        <div class="header-actions">
+                            <button class="btn btn-header mx-1" @click="viewHostFile" title="Ver archivo hosts">
+                                <i class="fas fa-file-lines me-1"></i> Ver archivo
+                            </button>
+                            <button class="btn btn-header mx-1" @click="showTagsModal = true" title="Administrar tags">
+                                <i class="fas fa-tags me-1"></i> Tags
+                            </button>
+                            <button class="btn btn-header mx-1" @click="showSettingsModal = true" title="Configuracion">
+                                <i class="fas fa-gear"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Toolbar -->
+            <div class="app-toolbar">
+                <div class="container-fluid">
+                    <div class="toolbar-content">
+                        <div class="search-box">
+                            <i class="fas fa-search search-icon"></i>
+                            <input
+                                type="text"
+                                class="form-control"
+                                placeholder="Buscar por dominio o IP..."
+                                v-model="search"
+                            >
+                            <button v-if="search" class="btn-clear" @click="search = ''">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="toolbar-filters">
+                            <button
+                                class="btn btn-filter"
+                                :class="{ active: filters.onlyActive }"
+                                @click="filters.onlyActive = !filters.onlyActive"
+                            >
+                                <i class="fas fa-toggle-on me-1"></i> Activos
+                            </button>
+                            <button
+                                class="btn btn-filter"
+                                :class="{ active: filters.onlyFavorite }"
+                                @click="filters.onlyFavorite = !filters.onlyFavorite"
+                            >
+                                <i class="fas fa-star me-1"></i> Favoritos
+                            </button>
+                            <button
+                                class="btn btn-filter"
+                                :class="{ active: filters.showHidden }"
+                                @click="filters.showHidden = !filters.showHidden"
+                            >
+                                <i class="fas fa-eye-slash me-1"></i> Ocultos
+                            </button>
+                            <div class="filter-divider" v-if="allTags.length"></div>
+                            <button
+                                v-for="tag in allTags"
+                                :key="tag.id"
+                                class="btn btn-filter btn-filter-tag"
+                                :class="{ active: filters.tagId === tag.id }"
+                                :style="filters.tagId === tag.id ? { background: tag.color, borderColor: tag.color } : {}"
+                                @click="filters.tagId = filters.tagId === tag.id ? null : tag.id"
+                            >
+                                <span class="tag-dot" :style="{ background: tag.color }"></span>
+                                {{ tag.label }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <main class="app-content">
+                <div class="container-fluid">
+                    <!-- Host Groups -->
+                    <div v-for="(hosts, ip) in filteredGroups" :key="ip" class="host-group">
+                        <div class="group-header" @click="toggleGroup(ip)">
+                            <div class="group-header-left">
+                                <i class="fas fa-chevron-right group-chevron" :class="{ rotated: !collapsedGroups[ip] }"></i>
+                                <span class="group-ip">{{ ip }}</span>
+                                <span class="group-count">{{ hosts.length }}</span>
+                            </div>
+                        </div>
+
+                        <div class="group-body" v-show="!collapsedGroups[ip]">
+                            <div
+                                v-for="host in hosts"
+                                :key="host.id"
+                                class="host-row"
+                                :class="{
+                                    'is-inactive': !host.active,
+                                    'is-hidden': host.hidden,
+                                    'is-highlight': host.id === highlightId
+                                }"
+                            >
+                                <div class="host-toggle">
+                                    <label class="switch">
+                                        <input type="checkbox" :checked="host.active" @change="toggleHost(host)">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="host-domain" v-html="highlightSearch(host.domain)"></div>
+                                <div class="host-tags-list">
+                                    <span
+                                        v-for="tag in host.tags"
+                                        :key="tag.id"
+                                        class="tag-pill"
+                                        :style="{ background: tag.color }"
+                                    >{{ tag.label }}</span>
+                                </div>
+                                <div class="host-ip-badge">{{ host.ip }}</div>
+                                <div class="host-actions">
+                                    <div class="tag-dropdown-wrapper">
+                                        <button
+                                            class="btn-icon"
+                                            :class="{ 'has-tags': host.tags.length }"
+                                            @click.stop="toggleTagDropdown(host.id)"
+                                            title="Tags"
+                                        >
+                                            <i class="fas fa-tag"></i>
+                                        </button>
+                                        <div class="tag-dropdown" v-if="tagDropdownHostId === host.id" @click.stop>
+                                            <div v-if="allTags.length === 0" class="tag-dropdown-empty">
+                                                Sin tags. Crea uno desde el boton Tags.
+                                            </div>
+                                            <label
+                                                v-for="tag in allTags"
+                                                :key="tag.id"
+                                                class="tag-dropdown-item"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    :checked="hostHasTag(host, tag.id)"
+                                                    @change="toggleHostTag(host, tag.id)"
+                                                >
+                                                <span class="tag-dot" :style="{ background: tag.color }"></span>
+                                                {{ tag.label }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <button
+                                        class="btn-icon"
+                                        :class="{ 'is-favorite': host.favorite }"
+                                        @click="toggleFavorite(host)"
+                                        title="Favorito"
+                                    >
+                                        <i :class="host.favorite ? 'fas fa-star' : 'far fa-star'"></i>
+                                    </button>
+                                    <button
+                                        class="btn-icon"
+                                        :class="{ 'is-hidden-btn': host.hidden }"
+                                        @click="toggleHidden(host)"
+                                        title="Ocultar"
+                                    >
+                                        <i :class="host.hidden ? 'fas fa-eye-slash' : 'far fa-eye'"></i>
+                                    </button>
+                                    <button class="btn-icon btn-icon-danger" @click="deleteHost(host)" title="Eliminar">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="Object.keys(filteredGroups).length === 0 && initialized" class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <p>No se encontraron hosts</p>
+                    </div>
+
+                    <!-- Add new host -->
+                    <div class="add-host-bar">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-auto">
+                                <input
+                                    type="text"
+                                    class="form-control form-control-sm"
+                                    v-model="newHost.ip"
+                                    placeholder="127.0.0.1"
+                                    style="width: 160px"
+                                    @keyup.enter="addHost"
+                                >
+                            </div>
+                            <div class="col">
+                                <input
+                                    type="text"
+                                    class="form-control form-control-sm"
+                                    v-model="newHost.domain"
+                                    placeholder="mi-dominio.local"
+                                    @keyup.enter="addHost"
+                                >
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-primary btn-sm" @click="addHost" :disabled="!newHost.domain">
+                                    <i class="fas fa-plus me-1"></i> Agregar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Modal Tags -->
+            <transition name="modal">
+                <div v-if="showTagsModal" class="modal-overlay" @click.self="showTagsModal = false">
+                    <div class="modal-box modal-box-sm">
+                        <div class="modal-header-custom">
+                            <h5 class="modal-title-custom"><i class="fas fa-tags me-2"></i>Administrar tags</h5>
+                            <button class="btn-icon" @click="showTagsModal = false">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body-custom p-3">
+                            <!-- Create tag -->
+                            <div class="tag-create-row">
+                                <input
+                                    type="color"
+                                    class="form-control form-control-color tag-color-input"
+                                    v-model="newTag.color"
+                                >
+                                <input
+                                    type="text"
+                                    class="form-control form-control-sm"
+                                    v-model="newTag.label"
+                                    placeholder="Nombre del tag"
+                                    @keyup.enter="createTag"
+                                >
+                                <button class="btn btn-primary btn-sm" @click="createTag" :disabled="!newTag.label.trim()">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+
+                            <!-- Tag list -->
+                            <div class="tag-manager-list">
+                                <div v-if="allTags.length === 0" class="text-center text-muted py-3">
+                                    <small>No hay tags creados</small>
+                                </div>
+                                <div v-for="tag in allTags" :key="tag.id" class="tag-manager-item">
+                                    <span class="tag-dot-lg" :style="{ background: tag.color }"></span>
+                                    <template v-if="editingTag && editingTag.id === tag.id">
+                                        <input
+                                            type="color"
+                                            class="form-control form-control-color tag-color-input"
+                                            v-model="editingTag.color"
+                                        >
+                                        <input
+                                            type="text"
+                                            class="form-control form-control-sm flex-fill"
+                                            v-model="editingTag.label"
+                                            @keyup.enter="saveTag"
+                                        >
+                                        <button class="btn-icon text-success" @click="saveTag" title="Guardar">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        <button class="btn-icon" @click="editingTag = null" title="Cancelar">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </template>
+                                    <template v-else>
+                                        <span class="tag-manager-label">{{ tag.label }}</span>
+                                        <button class="btn-icon" @click="editTag(tag)" title="Editar">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                        <button class="btn-icon btn-icon-danger" @click="deleteTag(tag)" title="Eliminar">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Modal Configuracion -->
+            <transition name="modal">
+                <div v-if="showSettingsModal" class="modal-overlay" @click.self="showSettingsModal = false">
+                    <div class="modal-box modal-box-sm">
+                        <div class="modal-header-custom">
+                            <h5 class="modal-title-custom"><i class="fas fa-gear me-2"></i>Configuracion</h5>
+                            <button class="btn-icon" @click="showSettingsModal = false">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body-custom p-3">
+                            <div class="settings-section">
+                                <h6 class="settings-label">Ruta del archivo hosts</h6>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="fas fa-file-alt"></i></span>
+                                    <input type="text" class="form-control" v-model="importPath">
+                                </div>
+                            </div>
+
+                            <div class="settings-section mt-3">
+                                <h6 class="settings-label">Reimportar archivo</h6>
+                                <p class="form-text mt-0 mb-2">Elimina todos los hosts actuales y vuelve a importar desde el archivo.</p>
+                                <button
+                                    class="btn btn-outline-danger btn-sm"
+                                    @click="reimportHosts"
+                                    :disabled="reimporting"
+                                >
+                                    <span v-if="reimporting" class="spinner-border spinner-border-sm me-1"></span>
+                                    <i v-else class="fas fa-rotate me-1"></i>
+                                    {{ reimporting ? 'Reimportando...' : 'Reimportar archivo hosts' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Modal Ver Archivo -->
+            <transition name="modal">
+                <div v-if="showFileModal" class="modal-overlay" @click.self="showFileModal = false">
+                    <div class="modal-box">
+                        <div class="modal-header-custom">
+                            <div>
+                                <h5 class="modal-title-custom">Archivo hosts</h5>
+                                <small class="text-muted">{{ hostFilePath }}</small>
+                            </div>
+                            <button class="btn-icon" @click="showFileModal = false">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="modal-body-custom">
+                            <div v-if="fileContent === null" class="text-center py-4 text-muted">
+                                <span class="spinner-border spinner-border-sm me-2"></span> Cargando...
+                            </div>
+                            <pre v-else class="file-content">{{ fileContent }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Toast -->
+            <transition name="toast">
+                <div v-if="toast.show" class="app-toast" :class="'toast-' + toast.type">
+                    <i :class="toast.type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'" class="me-2"></i>
+                    {{ toast.message }}
+                </div>
+            </transition>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="assets/js/app.js"></script>
+</body>
+</html>
