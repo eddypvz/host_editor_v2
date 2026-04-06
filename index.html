@@ -145,7 +145,7 @@
                                         <span class="slider"></span>
                                     </label>
                                 </div>
-                                <div class="host-domain" v-html="highlightSearch(host.domain)"></div>
+                                <a class="host-domain" :href="'http://' + host.domain" target="_blank" v-html="highlightSearch(host.domain)"></a>
                                 <div class="host-tags-list">
                                     <span v-for="tag in host.tags" :key="tag.id" class="tag-pill" :style="{ background: tag.color }">{{ tag.label }}</span>
                                 </div>

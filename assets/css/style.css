@@ -446,6 +446,12 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.host-domain:hover {
+    color: var(--primary);
 }
 
 .host-ip-badge {
